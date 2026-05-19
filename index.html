@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>離職的小夥伴們想請大家的餐點</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Order together</p>
+          <h1>離職的小夥伴們想請大家的餐點</h1>
+          <p class="subtitle">填姓名或綽號，選一杯飲料和一份炸物。提交後會同步到 Google Sheet，也會先留一份在本機紀錄。</p>
+        </div>
+        <div class="sync-panel">
+          <label for="sheetEndpoint">Google Apps Script Web App URL</label>
+          <div class="endpoint-row">
+            <input id="sheetEndpoint" type="url" placeholder="貼上部署後的 /exec 網址">
+            <button class="ghost" id="saveEndpoint" type="button">儲存</button>
+          </div>
+          <span class="hint">尚未部署前也可以先收單，紀錄會保存在這台電腦的瀏覽器。</span>
+        </div>
+      </header>
+
+      <section class="menu-gallery" aria-label="原始菜單">
+        <figure>
+          <img src="assets/drink-menu.jpg" alt="飲料店菜單">
+          <figcaption>飲料菜單</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/fried-menu.jpg" alt="炸物店菜單">
+          <figcaption>炸物菜單</figcaption>
+        </figure>
+      </section>
+
+      <form id="orderForm" class="order-grid">
+        <section class="panel identity-panel">
+          <div class="section-title">
+            <span>01</span>
+            <h2>點餐人</h2>
+          </div>
+          <div class="label-row">
+            <label for="customerName">姓名或綽號 <strong>必填</strong></label>
+            <span id="nameGuidance">可用暱稱，但盡量以可辨識為主。如果填寫家防孔劉或 lisa 等難辨識的狀態，將會於當日領取餐點時高呼三聲。</span>
+          </div>
+          <input id="customerName" name="customerName" type="text" placeholder="例如：小明、Kevin、阿婷" required autocomplete="name" aria-describedby="nameGuidance">
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <span>02</span>
+            <h2>飲料</h2>
+          </div>
+
+          <div class="field-pair">
+            <label for="drinkSearch">搜尋飲料</label>
+            <input id="drinkSearch" type="search" placeholder="輸入茶、奶、可可、芭樂...">
+          </div>
+
+          <label for="drinkSelect">選擇飲料</label>
+          <select id="drinkSelect" name="drinkSelect" required></select>
+
+          <div class="segmented" aria-label="杯型">
+            <label>
+              <input type="radio" name="drinkSize" value="M" checked>
+              <span>中杯</span>
+            </label>
+            <label>
+              <input type="radio" name="drinkSize" value="L">
+              <span>大杯</span>
+            </label>
+          </div>
+
+          <label for="sugarSelect">糖度</label>
+          <select id="sugarSelect" name="sugarSelect" required>
+            <option value="無糖">無糖</option>
+            <option value="微糖">微糖</option>
+            <option value="少糖">少糖</option>
+            <option value="全糖(勇者台南人)">全糖(勇者台南人)</option>
+          </select>
+
+          <label for="iceSelect">冰量</label>
+          <select id="iceSelect" name="iceSelect" required>
+            <option value="標準冰">標準冰</option>
+            <option value="少冰">少冰</option>
+            <option value="微冰">微冰</option>
+            <option value="去冰">去冰</option>
+            <option value="熱飲">熱飲</option>
+          </select>
+
+          <div class="toppings-head">
+            <h3>加料</h3>
+            <button class="text-button" id="clearToppings" type="button">清空</button>
+          </div>
+          <div id="toppingList" class="chips" aria-label="加料選項"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <span>03</span>
+            <h2>炸物</h2>
+          </div>
+
+          <div class="field-pair">
+            <label for="friedSearch">搜尋炸物</label>
+            <input id="friedSearch" type="search" placeholder="輸入雞排、魷魚、套餐...">
+          </div>
+
+          <label for="friedSelect">選擇餐點</label>
+          <select id="friedSelect" name="friedSelect" required></select>
+        </section>
+
+        <aside class="panel summary-panel">
+          <div class="section-title">
+            <span>04</span>
+            <h2>確認</h2>
+          </div>
+          <dl id="summary"></dl>
+          <div class="total-row">
+            <span>預估金額</span>
+            <strong id="totalPrice">$0</strong>
+          </div>
+          <button class="primary" type="submit">送出點餐</button>
+          <p id="statusMessage" class="status" role="status"></p>
+        </aside>
+      </form>
+
+      <section class="records">
+        <div class="records-head">
+          <div>
+            <p class="eyebrow">Local records</p>
+            <h2>本機點餐紀錄</h2>
+          </div>
+          <button class="ghost danger" id="clearRecords" type="button">清除紀錄</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>時間</th>
+                <th>點餐人</th>
+                <th>飲料</th>
+                <th>炸物</th>
+                <th>金額</th>
+              </tr>
+            </thead>
+            <tbody id="recordsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
