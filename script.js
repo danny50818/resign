@@ -148,12 +148,11 @@ const els = {
   form: document.querySelector("#orderForm"),
   customerName: document.querySelector("#customerName"),
   drinkSearch: document.querySelector("#drinkSearch"),
-  drinkSelect: document.querySelector("#drinkSelect"),
+  drinkItems: document.querySelector("#drinkItems"),
+  addDrink: document.querySelector("#addDrink"),
   friedSearch: document.querySelector("#friedSearch"),
-  friedSelect: document.querySelector("#friedSelect"),
-  sugarSelect: document.querySelector("#sugarSelect"),
-  iceSelect: document.querySelector("#iceSelect"),
-  toppingList: document.querySelector("#toppingList"),
+  friedItems: document.querySelector("#friedItems"),
+  addFried: document.querySelector("#addFried"),
   summary: document.querySelector("#summary"),
   totalPrice: document.querySelector("#totalPrice"),
   statusMessage: document.querySelector("#statusMessage"),
@@ -161,7 +160,6 @@ const els = {
   sheetEndpoint: document.querySelector("#sheetEndpoint"),
   saveEndpoint: document.querySelector("#saveEndpoint"),
   clearRecords: document.querySelector("#clearRecords"),
-  clearToppings: document.querySelector("#clearToppings"),
 };
 
 const STORAGE_KEYS = {
@@ -170,6 +168,8 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycbyuPFMhZm9cV4ME32ps1GfpRUa32U9aaTn5Jqwbl-e8iWYibvDBdKRsr02-0z5oLLCq-Q/exec";
+const SUGAR_OPTIONS = ["無糖", "微糖", "少糖", "全糖(勇者台南人)"];
+const ICE_OPTIONS = ["標準冰", "少冰", "微冰", "去冰", "熱飲"];
 
 function priceLabel(prices) {
   return Object.entries(prices)
@@ -177,24 +177,7 @@ function priceLabel(prices) {
     .join(" / ");
 }
 
-function selectedDrink() {
-  return drinks[Number(els.drinkSelect.value)] || drinks[0];
-}
-
-function selectedFried() {
-  return friedItems[Number(els.friedSelect.value)] || friedItems[0];
-}
-
-function selectedSize() {
-  const checked = document.querySelector("input[name='drinkSize']:checked");
-  return checked?.value || "M";
-}
-
-function selectedToppings() {
-  return [...document.querySelectorAll("input[name='toppings']:checked")].map((input) => toppings[Number(input.value)]);
-}
-
-function groupOptions(select, items, formatter) {
+function groupOptions(select, items, formatter, selectedValue = "") {
   const groups = new Map();
   items.forEach((item) => {
     if (!groups.has(item.category)) groups.set(item.category, []);
@@ -202,6 +185,15 @@ function groupOptions(select, items, formatter) {
   });
 
   select.innerHTML = "";
+  if (!items.length) {
+    const option = document.createElement("option");
+    option.textContent = "找不到符合的品項";
+    option.disabled = true;
+    option.selected = true;
+    select.append(option);
+    return;
+  }
+
   groups.forEach((groupItems, category) => {
     const group = document.createElement("optgroup");
     group.label = category;
@@ -209,79 +201,206 @@ function groupOptions(select, items, formatter) {
       const option = document.createElement("option");
       option.value = item.originalIndex;
       option.textContent = formatter(item);
+      option.selected = String(item.originalIndex) === String(selectedValue);
       group.append(option);
     });
     select.append(group);
   });
 }
 
-function renderDrinkOptions() {
-  const keyword = els.drinkSearch.value.trim().toLowerCase();
-  const filtered = drinks
-    .map((item, index) => ({ ...item, originalIndex: index }))
-    .filter((item) => `${item.category} ${item.name}`.toLowerCase().includes(keyword));
-  groupOptions(els.drinkSelect, filtered, (item) => `${item.name} - ${priceLabel(item.prices)}`);
-  updateSizeAvailability();
+function optionItems(items, keyword, selectedValue) {
+  const normalizedKeyword = keyword.trim().toLowerCase();
+  const mapped = items.map((item, index) => ({ ...item, originalIndex: index }));
+  const filtered = mapped.filter((item) => `${item.category} ${item.name}`.toLowerCase().includes(normalizedKeyword));
+  if (selectedValue !== "" && !filtered.some((item) => String(item.originalIndex) === String(selectedValue))) {
+    const selected = mapped[Number(selectedValue)];
+    if (selected) filtered.unshift(selected);
+  }
+  return filtered;
 }
 
-function renderFriedOptions() {
-  const keyword = els.friedSearch.value.trim().toLowerCase();
-  const filtered = friedItems
-    .map((item, index) => ({ ...item, originalIndex: index }))
-    .filter((item) => `${item.category} ${item.name}`.toLowerCase().includes(keyword));
-  groupOptions(els.friedSelect, filtered, (item) => `${item.name} - $${item.price}`);
+function renderDrinkOptions() {
+  document.querySelectorAll(".drink-row").forEach((row) => {
+    const select = row.querySelector(".drink-select");
+    const selectedValue = select.value;
+    groupOptions(select, optionItems(drinks, els.drinkSearch.value, selectedValue), (item) => `${item.name} - ${priceLabel(item.prices)}`, selectedValue);
+    updateDrinkSizeOptions(row);
+  });
   updateSummary();
 }
 
-function renderToppings() {
-  els.toppingList.innerHTML = toppings
+function renderFriedOptions() {
+  document.querySelectorAll(".fried-row").forEach((row) => {
+    const select = row.querySelector(".fried-select");
+    const selectedValue = select.value;
+    groupOptions(select, optionItems(friedItems, els.friedSearch.value, selectedValue), (item) => `${item.name} - $${item.price}`, selectedValue);
+  });
+  updateSummary();
+}
+
+function toppingHTML() {
+  return toppings
     .map((item, index) => `
       <label class="chip">
-        <input type="checkbox" name="toppings" value="${index}">
+        <input type="checkbox" class="topping-select" value="${index}">
         <span>${item.name} +$${item.price}</span>
       </label>
     `)
     .join("");
 }
 
-function updateSizeAvailability() {
-  const drink = selectedDrink();
-  const radios = [...document.querySelectorAll("input[name='drinkSize']")];
-  radios.forEach((radio) => {
-    radio.disabled = !drink.prices[radio.value];
-  });
+function selectHTML(options, className) {
+  return `
+    <select class="${className}" required>
+      ${options.map((option) => `<option value="${option}">${option}</option>`).join("")}
+    </select>
+  `;
+}
 
-  const current = document.querySelector("input[name='drinkSize']:checked");
-  if (!current || current.disabled) {
-    const firstAvailable = radios.find((radio) => !radio.disabled);
-    if (firstAvailable) firstAvailable.checked = true;
-  }
+function updateDrinkSizeOptions(row) {
+  const drink = drinks[Number(row.querySelector(".drink-select").value)] || drinks[0];
+  const sizeSelect = row.querySelector(".drink-size");
+  const current = sizeSelect.value;
+  const options = Object.keys(drink.prices);
+  sizeSelect.innerHTML = options
+    .map((size) => `<option value="${size}">${size === "M" ? "中杯" : "大杯"} - $${drink.prices[size]}</option>`)
+    .join("");
+  sizeSelect.value = options.includes(current) ? current : options[0];
+}
+
+function renumberRows(container, label) {
+  container.querySelectorAll(".item-row").forEach((row, index) => {
+    row.querySelector(".item-row-title").textContent = `${label} ${index + 1}`;
+    const removeButton = row.querySelector(".remove-item");
+    removeButton.disabled = container.querySelectorAll(".item-row").length === 1;
+  });
+}
+
+function addDrinkRow() {
+  const row = document.createElement("div");
+  row.className = "item-row drink-row";
+  row.innerHTML = `
+    <div class="item-row-head">
+      <span class="item-row-title">飲料</span>
+      <button class="remove-item" type="button" aria-label="刪除此飲料">-</button>
+    </div>
+    <div class="item-controls">
+      <div class="wide">
+        <label>飲料品項</label>
+        <select class="drink-select" required></select>
+      </div>
+      <div>
+        <label>杯型</label>
+        <select class="drink-size" required></select>
+      </div>
+      <div>
+        <label>糖度</label>
+        ${selectHTML(SUGAR_OPTIONS, "sugar-select")}
+      </div>
+      <div>
+        <label>冰量</label>
+        ${selectHTML(ICE_OPTIONS, "ice-select")}
+      </div>
+      <div class="wide">
+        <label>加料</label>
+        <div class="chips">${toppingHTML()}</div>
+      </div>
+    </div>
+  `;
+  els.drinkItems.append(row);
+  renderDrinkOptions();
+  renumberRows(els.drinkItems, "飲料");
   updateSummary();
 }
 
+function addFriedRow() {
+  const row = document.createElement("div");
+  row.className = "item-row fried-row";
+  row.innerHTML = `
+    <div class="item-row-head">
+      <span class="item-row-title">炸物</span>
+      <button class="remove-item" type="button" aria-label="刪除此炸物">-</button>
+    </div>
+    <div class="item-controls">
+      <div class="wide">
+        <label>炸物品項</label>
+        <select class="fried-select" required></select>
+      </div>
+    </div>
+  `;
+  els.friedItems.append(row);
+  renderFriedOptions();
+  renumberRows(els.friedItems, "炸物");
+  updateSummary();
+}
+
+function selectedDrinkItems() {
+  return [...document.querySelectorAll(".drink-row")].map((row, index) => {
+    const drink = drinks[Number(row.querySelector(".drink-select").value)] || drinks[0];
+    const size = row.querySelector(".drink-size").value;
+    const toppingList = [...row.querySelectorAll(".topping-select:checked")].map((input) => toppings[Number(input.value)]);
+    const toppingTotal = toppingList.reduce((sum, item) => sum + item.price, 0);
+    const drinkPrice = drink.prices[size] || 0;
+
+    return {
+      line: index + 1,
+      category: drink.category,
+      name: drink.name,
+      size: size === "M" ? "中杯" : "大杯",
+      sugar: row.querySelector(".sugar-select").value,
+      ice: row.querySelector(".ice-select").value,
+      toppings: toppingList.map((item) => item.name).join("、") || "無",
+      drinkPrice,
+      toppingTotal,
+      total: drinkPrice + toppingTotal,
+    };
+  });
+}
+
+function selectedFriedItems() {
+  return [...document.querySelectorAll(".fried-row")].map((row, index) => {
+    const item = friedItems[Number(row.querySelector(".fried-select").value)] || friedItems[0];
+    return {
+      line: index + 1,
+      category: item.category,
+      name: item.name,
+      price: item.price,
+    };
+  });
+}
+
+function drinkSummary(item) {
+  return `${item.name} / ${item.size} / ${item.sugar} / ${item.ice} / 加料：${item.toppings} ($${item.total})`;
+}
+
+function friedSummary(item) {
+  return `${item.name} ($${item.price})`;
+}
+
 function buildOrder() {
-  const drink = selectedDrink();
-  const fried = selectedFried();
-  const size = selectedSize();
-  const toppingList = selectedToppings();
-  const drinkPrice = drink.prices[size] || 0;
-  const toppingTotal = toppingList.reduce((sum, item) => sum + item.price, 0);
-  const total = drinkPrice + toppingTotal + fried.price;
+  const drinkItems = selectedDrinkItems();
+  const friedSelections = selectedFriedItems();
+  const drinkPrice = drinkItems.reduce((sum, item) => sum + item.drinkPrice, 0);
+  const toppingTotal = drinkItems.reduce((sum, item) => sum + item.toppingTotal, 0);
+  const friedPrice = friedSelections.reduce((sum, item) => sum + item.price, 0);
+  const total = drinkPrice + toppingTotal + friedPrice;
 
   return {
     orderedAt: new Date().toLocaleString("zh-TW", { hour12: false }),
     customerName: els.customerName.value.trim(),
-    drinkCategory: drink.category,
-    drinkName: drink.name,
-    drinkSize: size === "M" ? "中杯" : "大杯",
-    sugar: els.sugarSelect.value,
-    ice: els.iceSelect.value,
-    toppings: toppingList.map((item) => item.name).join("、") || "無",
-    friedCategory: fried.category,
-    friedName: fried.name,
+    drinkItems,
+    friedItems: friedSelections,
+    drinkCategory: drinkItems.map((item) => item.category).join("、"),
+    drinkName: drinkItems.map(drinkSummary).join("\n"),
+    drinkSize: drinkItems.map((item) => item.size).join("、"),
+    sugar: drinkItems.map((item) => item.sugar).join("、"),
+    ice: drinkItems.map((item) => item.ice).join("、"),
+    toppings: drinkItems.map((item) => item.toppings).join(" / "),
+    friedCategory: friedSelections.map((item) => item.category).join("、"),
+    friedName: friedSelections.map(friedSummary).join("\n"),
     drinkPrice,
     toppingTotal,
-    friedPrice: fried.price,
+    friedPrice,
     total,
   };
 }
@@ -291,9 +410,8 @@ function updateSummary() {
   const name = order.customerName || "尚未填寫";
   els.summary.innerHTML = `
     <div><dt>點餐人</dt><dd>${name}</dd></div>
-    <div><dt>飲料</dt><dd>${order.drinkName} / ${order.drinkSize} / ${order.sugar} / ${order.ice}</dd></div>
-    <div><dt>加料</dt><dd>${order.toppings}</dd></div>
-    <div><dt>炸物</dt><dd>${order.friedName}</dd></div>
+    <div><dt>飲料</dt><dd>${order.drinkName.replaceAll("\n", "<br>") || "尚未選擇"}</dd></div>
+    <div><dt>炸物</dt><dd>${order.friedName.replaceAll("\n", "<br>") || "尚未選擇"}</dd></div>
   `;
   els.totalPrice.textContent = `$${order.total}`;
 }
@@ -317,8 +435,8 @@ function renderRecords() {
       <tr>
         <td>${order.orderedAt}</td>
         <td>${order.customerName}</td>
-        <td>${order.drinkName} / ${order.drinkSize} / ${order.sugar} / ${order.ice}<br>加料：${order.toppings}</td>
-        <td>${order.friedName}</td>
+        <td>${String(order.drinkName).replaceAll("\n", "<br>")}</td>
+        <td>${String(order.friedName).replaceAll("\n", "<br>")}</td>
         <td>$${order.total}</td>
       </tr>
     `).join("")
@@ -346,20 +464,32 @@ function setStatus(message, isError = false) {
 els.form.addEventListener("input", updateSummary);
 els.drinkSearch.addEventListener("input", renderDrinkOptions);
 els.friedSearch.addEventListener("input", renderFriedOptions);
-els.drinkSelect.addEventListener("change", updateSizeAvailability);
-els.friedSelect.addEventListener("change", updateSummary);
-els.toppingList.addEventListener("change", updateSummary);
+els.addDrink.addEventListener("click", addDrinkRow);
+els.addFried.addEventListener("click", addFriedRow);
+els.drinkItems.addEventListener("change", (event) => {
+  const row = event.target.closest(".drink-row");
+  if (event.target.classList.contains("drink-select") && row) updateDrinkSizeOptions(row);
+  updateSummary();
+});
+els.drinkItems.addEventListener("click", (event) => {
+  if (!event.target.classList.contains("remove-item")) return;
+  event.target.closest(".drink-row").remove();
+  if (!els.drinkItems.querySelector(".drink-row")) addDrinkRow();
+  renumberRows(els.drinkItems, "飲料");
+  updateSummary();
+});
+els.friedItems.addEventListener("change", updateSummary);
+els.friedItems.addEventListener("click", (event) => {
+  if (!event.target.classList.contains("remove-item")) return;
+  event.target.closest(".fried-row").remove();
+  if (!els.friedItems.querySelector(".fried-row")) addFriedRow();
+  renumberRows(els.friedItems, "炸物");
+  updateSummary();
+});
 
 els.saveEndpoint.addEventListener("click", () => {
   localStorage.setItem(STORAGE_KEYS.endpoint, els.sheetEndpoint.value.trim());
   setStatus("Google Sheet 同步網址已儲存。");
-});
-
-els.clearToppings.addEventListener("click", () => {
-  document.querySelectorAll("input[name='toppings']").forEach((input) => {
-    input.checked = false;
-  });
-  updateSummary();
 });
 
 els.clearRecords.addEventListener("click", () => {
@@ -387,18 +517,26 @@ els.form.addEventListener("submit", async (event) => {
     setStatus(message);
     els.form.reset();
     els.sheetEndpoint.value = localStorage.getItem(STORAGE_KEYS.endpoint) || DEFAULT_SHEET_ENDPOINT;
-    renderDrinkOptions();
-    renderFriedOptions();
-    document.querySelector("input[name='drinkSize'][value='M']").checked = true;
-    updateSizeAvailability();
+    els.drinkItems.innerHTML = "";
+    els.friedItems.innerHTML = "";
+    addDrinkRow();
+    addFriedRow();
   } catch (error) {
     setStatus(`本機已儲存，但同步失敗：${error.message}`, true);
   }
 });
 
+document.querySelectorAll(".menu-gallery img").forEach((image) => {
+  image.addEventListener("error", () => {
+    const fallback = document.createElement("div");
+    fallback.className = "image-fallback";
+    fallback.textContent = "菜單圖片載入失敗，請確認 GitHub repo 有包含 assets 資料夾，且 Render 的 Publish Directory 設為專案根目錄。";
+    image.replaceWith(fallback);
+  });
+});
+
 els.sheetEndpoint.value = localStorage.getItem(STORAGE_KEYS.endpoint) || DEFAULT_SHEET_ENDPOINT;
-renderToppings();
-renderDrinkOptions();
-renderFriedOptions();
+addDrinkRow();
+addFriedRow();
 renderRecords();
 updateSummary();

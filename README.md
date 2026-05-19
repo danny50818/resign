@@ -14,6 +14,16 @@
 
 第一次收到訂單時，Apps Script 會用你的 Google 帳戶建立一份名為「離職小夥伴點餐紀錄」的 Google Sheet，之後每筆訂單都會追加到同一份表。
 
+## Render 部署提醒
+
+這個專案是靜態網站，Render 建議設定：
+
+- Type：Static Site
+- Build Command：留空，或填 `echo static`
+- Publish Directory：`.`
+
+請確認 `assets/drink-menu.jpg` 和 `assets/fried-menu.jpg` 有一起 commit 並推到 GitHub。若 Render 發布後菜單圖片不見，通常是 `assets` 資料夾沒有進 repo，或 Publish Directory 沒有設為專案根目錄。
+
 ## 檔案
 
 - `index.html`：點餐頁面
