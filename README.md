@@ -1,4 +1,4 @@
-# 離職的小夥伴們想請大家的餐點
+# 待退的小夥伴們想請大家的餐點
 
 這是一個靜態網頁版點餐系統，直接開 `index.html` 就能使用。
 
@@ -12,7 +12,7 @@
 6. 授權後複製部署得到的 `/exec` 網址。
 7. 回到網頁，貼到「Google Apps Script Web App URL」並按儲存。
 
-第一次收到訂單時，Apps Script 會用你的 Google 帳戶建立一份名為「離職小夥伴點餐紀錄」的 Google Sheet，之後每筆訂單都會追加到同一份表。
+第一次收到訂單時，Apps Script 會用你的 Google 帳戶建立一份名為「待退小夥伴點餐紀錄」的 Google Sheet，之後每筆訂單都會追加到同一份表。
 
 ## Render 部署提醒
 
